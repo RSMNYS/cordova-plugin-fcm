@@ -1,6 +1,6 @@
 var exec = require('cordova/exec');
 
-function FCMPlugin() { 
+function FCMPlugin() {
 	console.log("FCMPlugin.js: is created");
 }
 
@@ -35,6 +35,11 @@ FCMPlugin.prototype.onNotificationReceived = function(payload){
 FCMPlugin.prototype.onTokenRefreshReceived = function(token){
 	console.log("Received token refresh")
 	console.log(token)
+}
+
+//REGISTER FOR PUSH NOTIFICATIONS
+FCMPlugin.prototype.registerForPushNotifications = function( success, error ){
+	exec(success, error, "FCMPlugin", 'registerForPushNotifications', []);
 }
 // FIRE READY //
 exec(function(result){ console.log("FCMPlugin Ready OK") }, function(result){ console.log("FCMPlugin Ready ERROR") }, "FCMPlugin",'ready',[]);
