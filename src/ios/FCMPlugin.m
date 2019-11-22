@@ -7,6 +7,11 @@
 #import "FCMPlugin.h"
 #import "Firebase.h"
 
+#if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
+@import UserNotifications;
+#endif
+
+
 @interface FCMPlugin () {}
 @end
 
@@ -20,7 +25,7 @@ static NSString *tokenRefreshCallback = @"FCMPlugin.onTokenRefreshReceived";
 static FCMPlugin *fcmPluginInstance;
 
 + (FCMPlugin *) fcmPlugin {
-    
+
     return fcmPluginInstance;
 }
 
@@ -29,16 +34,16 @@ static FCMPlugin *fcmPluginInstance;
     NSLog(@"Cordova view ready");
     fcmPluginInstance = self;
     [self.commandDelegate runInBackground:^{
-        
+
         CDVPluginResult* pluginResult = nil;
         pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
         [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
     }];
-    
+
 }
 
 // GET TOKEN //
-- (void) getToken:(CDVInvokedUrlCommand *)command 
+- (void) getToken:(CDVInvokedUrlCommand *)command
 {
     NSLog(@"get Token");
     [self.commandDelegate runInBackground:^{
@@ -49,8 +54,53 @@ static FCMPlugin *fcmPluginInstance;
     }];
 }
 
+- (void)registerForPushNotifications:(CDVInvokedUrlCommand *)command
+{
+    NSLog(@"Register for push notifications");
+
+    if (floor(NSFoundationVersionNumber) <= NSFoundationVersionNumber_iOS_7_1) {
+            // iOS 7.1 or earlier. Disable the deprecation warnings.
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            UIRemoteNotificationType allNotificationTypes =
+            (UIRemoteNotificationTypeSound |
+             UIRemoteNotificationTypeAlert |
+             UIRemoteNotificationTypeBadge);
+            [[UIApplication sharedApplication] registerForRemoteNotificationTypes:allNotificationTypes];
+    #pragma clang diagnostic pop
+        } else {
+            // iOS 8 or later
+            // [START register_for_notifications]
+            if (floor(NSFoundationVersionNumber) <= NSFoundationVersionNumber_iOS_9_x_Max) {
+                UIUserNotificationType allNotificationTypes =
+                (UIUserNotificationTypeSound | UIUserNotificationTypeAlert | UIUserNotificationTypeBadge);
+                UIUserNotificationSettings *settings =
+                [UIUserNotificationSettings settingsForTypes:allNotificationTypes categories:nil];
+                [[UIApplication sharedApplication] registerUserNotificationSettings:settings];
+            } else {
+                // iOS 10 or later
+    #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
+                UNAuthorizationOptions authOptions =
+                UNAuthorizationOptionAlert
+                | UNAuthorizationOptionSound
+                | UNAuthorizationOptionBadge;
+                [[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:authOptions completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                }];
+
+                // For iOS 10 display notification (sent via APNS)
+                [UNUserNotificationCenter currentNotificationCenter].delegate = self;
+                // For iOS 10 data message (sent via FCM)
+                [FIRMessaging messaging].remoteMessageDelegate = self;
+    #endif
+            }
+
+            [[UIApplication sharedApplication] registerForRemoteNotifications];
+            // [END register_for_notifications]
+        }
+}
+
 // UN/SUBSCRIBE TOPIC //
-- (void) subscribeToTopic:(CDVInvokedUrlCommand *)command 
+- (void) subscribeToTopic:(CDVInvokedUrlCommand *)command
 {
     NSString* topic = [command.arguments objectAtIndex:0];
     NSLog(@"subscribe To Topic %@", topic);
@@ -62,7 +112,7 @@ static FCMPlugin *fcmPluginInstance;
     }];
 }
 
-- (void) unsubscribeFromTopic:(CDVInvokedUrlCommand *)command 
+- (void) unsubscribeFromTopic:(CDVInvokedUrlCommand *)command
 {
     NSString* topic = [command.arguments objectAtIndex:0];
     NSLog(@"unsubscribe From Topic %@", topic);
@@ -77,13 +127,13 @@ static FCMPlugin *fcmPluginInstance;
 - (void) registerNotification:(CDVInvokedUrlCommand *)command
 {
     NSLog(@"view registered for notifications");
-    
+
     notificatorReceptorReady = YES;
     NSData* lastPush = [AppDelegate getLastPush];
     if (lastPush != nil) {
         [FCMPlugin.fcmPlugin notifyOfMessage:lastPush];
     }
-    
+
     CDVPluginResult* pluginResult = nil;
     pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
@@ -94,7 +144,7 @@ static FCMPlugin *fcmPluginInstance;
     NSString *JSONString = [[NSString alloc] initWithBytes:[payload bytes] length:[payload length] encoding:NSUTF8StringEncoding];
     NSString * notifyJS = [NSString stringWithFormat:@"%@(%@);", notificationCallback, JSONString];
     NSLog(@"stringByEvaluatingJavaScriptFromString %@", notifyJS);
-    
+
     if ([self.webView respondsToSelector:@selector(stringByEvaluatingJavaScriptFromString:)]) {
         [(UIWebView *)self.webView stringByEvaluatingJavaScriptFromString:notifyJS];
     } else {
@@ -106,7 +156,7 @@ static FCMPlugin *fcmPluginInstance;
 {
     NSString * notifyJS = [NSString stringWithFormat:@"%@('%@');", tokenRefreshCallback, token];
     NSLog(@"stringByEvaluatingJavaScriptFromString %@", notifyJS);
-    
+
     if ([self.webView respondsToSelector:@selector(stringByEvaluatingJavaScriptFromString:)]) {
         [(UIWebView *)self.webView stringByEvaluatingJavaScriptFromString:notifyJS];
     } else {
